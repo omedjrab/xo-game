@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OUSSY AND SOUMY GAME</title>
+<style>
+body { font-family: Arial, sans-serif; margin:0; padding:0; background:#121212; color:#fff; display:flex; flex-direction:column; align-items:center; }
+h1 { margin:20px 0 10px; text-align:center; font-size:28px; }
+.blue { color:#1e90ff; }
+.yellow { color:#ffd700; }
+#status-box { margin-bottom:10px; padding:10px 15px; border-radius:12px; font-size:18px; font-weight:bold; min-width:220px; text-align:center; transition: transform 0.3s ease, opacity 0.3s ease; background:#333; }
+#game-container { width:95vw; max-width:450px; display:flex; flex-direction:column; align-items:center; }
+#board { display:grid; grid-template-columns:repeat(3,1fr); grid-gap:5px; width:100%; margin:10px 0; }
+.cell { width:100%; padding-top:100%; position:relative; background:#1e1e1e; border-radius:10px; box-shadow:0 3px 5px rgba(0,0,0,0.5); cursor:pointer; transition: transform 0.1s, background 0.2s; }
+.cell:hover { background:#2a2a2a; }
+.cell:active { transform: scale(0.95); }
+.cell span { position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); font-size:3rem; user-select:none; }
+#scores { margin-top:5px; font-size:16px; text-align:center; }
+#restart { margin-top:10px; padding:10px 20px; font-size:16px; border:none; border-radius:8px; background:#1e90ff; color:white; cursor:pointer; transition: background 0.2s; }
+#restart:hover { background:#104e8b; }
+#chat-toggle { position:fixed; bottom:20px; right:20px; background:#1e90ff; width:50px; height:50px; border-radius:50%; cursor:pointer; display:flex; justify-content:center; align-items:center; font-weight:bold; font-size:18px; color:#fff; z-index:100; }
+#chat-box { position:fixed; bottom:80px; right:20px; width:300px; max-width:90vw; background:#1e1e1e; border-radius:12px; display:none; flex-direction:column; padding:10px; max-height:400px; }
+#messages { flex:1; overflow-y:auto; margin-bottom:10px; }
+.message { margin:5px 0; padding:5px 10px; border-radius:12px; max-width:80%; word-wrap:break-word; }
+.message.you { background:#1e90ff; color:#fff; align-self:flex-end; }
+.message.other { background:#333; color:#fff; align-self:flex-start; }
+#chat-form { display:flex; }
+#chat-input { flex:1; padding:8px; border-radius:5px; border:none; margin-right:5px; }
+#chat-send { padding:8px 12px; border:none; border-radius:5px; background:#1e90ff; color:white; cursor:pointer; }
+#chat-send:hover { background:#104e8b; }
+#role-selection { display:flex; gap:10px; margin:10px 0; }
+.role-btn { padding:8px 15px; border:none; border-radius:8px; cursor:pointer; font-size:16px; font-weight:bold; }
+.role-btn.oussy { background:#1e90ff; color:white; }
+.role-btn.soumy { background:#ffd700; color:#000; }
+#choosing-player { font-size:20px; margin:10px; display:none; }
+</style>
+</head>
+<body>
+
+<h1><span class="blue">OUSSY</span> AND <span class="yellow">SOUMY</span> GAME</h1>
+<div id="status-box">Waiting for players...</div>
+<div id="choosing-player">Choosing player...</div>
+<div id="role-selection" style="display:none;">
+  <button class="role-btn oussy">I am OUSSY</button>
+  <button class="role-btn soumy">I am SOUMY</button>
+</div>
+
+<div id="game-container">
+  <div id="board">
+    <div class="cell" data-pos="0"><span></span></div>
+    <div class="cell" data-pos="1"><span></span></div>
+    <div class="cell" data-pos="2"><span></span></div>
+    <div class="cell" data-pos="3"><span></span></div>
+    <div class="cell" data-pos="4"><span></span></div>
+    <div class="cell" data-pos="5"><span></span></div>
+    <div class="cell" data-pos="6"><span></span></div>
+    <div class="cell" data-pos="7"><span></span></div>
+    <div class="cell" data-pos="8"><span></span></div>
+  </div>
+  <div id="scores">X: 0 | O: 0</div>
+  <button id="restart">New Game</button>
+</div>
+
+<div id="chat-toggle">💬</div>
+<div id="chat-box">
+  <div id="messages"></div>
+  <form id="chat-form">
+    <input type="text" id="chat-input" placeholder="Type a message" autocomplete="off"/>
+    <button type="submit" id="chat-send">Send</button>
+  </form>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getDatabase, ref, set, onValue, push, onChildAdded, remove, get, child, update } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+// Firebase config
+const firebaseConfig = {
+  apiKey: "AIzaSyDKGQPY40GMLGFbegwDGIL7DAyvTEZJKwM",
+  authDomain: "xo-game-f59f7.firebaseapp.com",
+  databaseURL: "https://xo-game-f59f7-default-rtdb.firebaseio.com",
+  projectId: "xo-game-f59f7",
+  storageBucket: "xo-game-f59f7.firebasestorage.app",
+  messagingSenderId: "911253816370",
+  appId: "1:911253816370:web:677696302f256a3f03a82b",
+  measurementId: "G-HEC0FE9144"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+const board = document.querySelectorAll('.cell span');
+const statusBox = document.getElementById('status-box');
+const choosingDiv = document.getElementById('choosing-player');
+const scoresEl = document.getElementById('scores');
+const restartBtn = document.getElementById('restart');
+const chatToggle = document.getElementById('chat-toggle');
+const chatBox = document.getElementById('chat-box');
+const chatForm = document.getElementById('chat-form');
+const chatInput = document.getElementById('chat-input');
+const messagesDiv = document.getElementById('messages');
+const roleSelection = document.getElementById('role-selection');
+const roleButtons = document.querySelectorAll('.role-btn');
+
+const gameRef = ref(db, 'games/game1');
+const chatRef = ref(db, 'games/game1/chat');
+const playersRef = ref(db, 'games/game1/players');
+const boardRef = ref(db, 'games/game1/board');
+const turnRef = ref(db, 'games/game1/turn');
+const startRef = ref(db, 'games/game1/start');
+
+let playerSymbol = null; 
+let playerName = null;
+let myTurn = false;
+let myId = Math.random().toString(36).substr(2,9); // unique id per device
+let scores = { X:0, O:0 };
+let joined = false;
+
+// Clean players if someone reloads/leaves
+window.addEventListener('beforeunload', async ()=>{
+  if(joined && playerSymbol){
+    const playerPath = `games/game1/players/${playerSymbol}`;
+    await remove(ref(db,playerPath));
+  }
+});
+
+// Monitor players
+onValue(playersRef, snapshot=>{
+  const players = snapshot.val() || {};
+  const keys = Object.keys(players);
+  if(keys.length < 2){
+    statusBox.textContent = 'Waiting for second player...';
+    joined=false;
+    return;
+  }
+  if(!joined){
+    roleSelection.style.display='flex';
+  }
+});
+
+// Choose role
+roleButtons.forEach(btn=>{
+  btn.addEventListener('click', async ()=>{
+    playerName = btn.textContent.includes('OUSSY')?'OUSSY':'SOUMY';
+    playerSymbol = playerName==='OUSSY'?'X':'O';
+    joined=true;
+    roleSelection.style.display='none';
+    choosingDiv.style.display='block';
+    setTimeout(()=>{
+      choosingDiv.style.display='none';
+      initializeGame();
+    },1500);
+
+    // register player
+    const playersSnap = await get(playersRef);
+    const playersData = playersSnap.val() || {};
+    let updates = {};
+    if(!playersData[playerSymbol]) updates[playerSymbol] = {name:playerName,id:myId};
+    await update(playersRef, updates);
+  });
+});
+
+// Initialize game
+async function initializeGame(){
+  const gameSnap = await get(gameRef);
+  const gameData = gameSnap.val() || {};
+  if(!gameData.start){
+    const startSymbol = Math.random()<0.5?'X':'O';
+    await set(startRef, startSymbol);
+    await set(turnRef, startSymbol);
+  }
+}
+
+// Update board and turn
+onValue(gameRef, snapshot=>{
+  const data = snapshot.val() || {};
+  const boardData = data.board || {};
+  const turn = data.turn;
+
+  const players = data.players || {};
+  if(!players.X || !players.O){
+    statusBox.textContent = 'Waiting for players...';
+    return;
+  }
+
+  const myPlayer = Object.values(players).find(p=>p.id===myId);
+  if(myPlayer){
+    myTurn = (turn === playerSymbol);
+    statusBox.textContent = myTurn?'Your turn!':'Opponent turn';
+  }else{
+    myTurn=false;
+    statusBox.textContent='Waiting for players...';
+  }
+
+  for(let i=0;i<9;i++){
+    board[i].textContent = boardData[i] || '';
+  }
+
+  checkWinner(boardData);
+});
+
+// Player move
+board.forEach((cell,index)=>{
+  cell.parentElement.addEventListener('click', async ()=>{
+    const dataSnap = await get(gameRef);
+    const data = dataSnap.val() || {};
+    const boardData = data.board || {};
+    if(!myTurn || boardData[index]) return;
+    await set(ref(db,`games/game1/board/${index}`),playerSymbol);
+    await set(turnRef,playerSymbol==='X'?'O':'X');
+  });
+});
+
+// Restart game
+restartBtn.addEventListener('click', async ()=>{
+  await remove(boardRef);
+  await remove(startRef);
+  await remove(turnRef);
+  await remove(chatRef);
+});
+
+// Check winner
+function checkWinner(boardData){
+  const combos=[[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+  for(const [a,b,c] of combos){
+    if(boardData[a] && boardData[a]===boardData[b] && boardData[a]===boardData[c]){
+      const winner = boardData[a];
+      scores[winner]++;
+      scoresEl.textContent = `X: ${scores.X} | O: ${scores.O}`;
+      statusBox.textContent = `Player ${winner} Wins!`;
+      return;
+    }
+  }
+  if(Object.keys(boardData).length===9){
+    statusBox.textContent='Draw!';
+  }
+}
+
+// Chat toggle
+chatToggle.addEventListener('click',()=>{chatBox.style.display = chatBox.style.display==='flex'?'none':'flex';});
+
+// Chat system
+chatForm.addEventListener('submit',async e=>{
+  e.preventDefault();
+  const msg = chatInput.value.trim();
+  if(!msg) return;
+  await push(chatRef,{player:playerName,text:msg});
+  chatInput.value='';
+});
+
+// Show messages
+onChildAdded(chatRef,snapshot=>{
+  const msg = snapshot.val();
+  const div = document.createElement('div');
+  div.classList.add('message');
+  div.classList.add(msg.player===playerName?'you':'other');
+  div.textContent = `${msg.player}: ${msg.text}`;
+  messagesDiv.appendChild(div);
+  messagesDiv.scrollTop=messagesDiv.scrollHeight;
+});
+</script>
+
+</body>
+</html>
